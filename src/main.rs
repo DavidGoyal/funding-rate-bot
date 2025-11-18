@@ -1,5 +1,4 @@
 use dotenvy::dotenv;
-use std::sync::Arc;
 use tokio::time::{Duration, interval};
 
 use crate::{
@@ -77,14 +76,14 @@ async fn main() -> anyhow::Result<()> {
             let result = fetch_market_info(
                 &extended_market_names[i],
                 &pacifica_market_names[i],
-                Arc::new(extended_open_positions.clone()),
-                Arc::new(pacifica_open_positions.clone()),
+                &extended_open_positions,
+                &pacifica_open_positions,
             )
             .await;
 
             match result {
-                Err(_) => println!("Invalid Url for index {}", i),
-                _ => println!("Success for index {}", i),
+                Ok(_) => println!("Success for market {}", extended_market_names[i]),
+                Err(e) => println!("Error for market {}: {}", extended_market_names[i], e),
             }
         }
     }
@@ -93,8 +92,8 @@ async fn main() -> anyhow::Result<()> {
 async fn fetch_market_info(
     extended_market_name: &str,
     pacifica_market_name: &str,
-    extended_open_positions: Arc<Vec<ExtendedOpenPositionData>>,
-    pacifica_open_positions: Arc<Vec<PacificaOpenPositionData>>,
+    extended_open_positions: &Vec<ExtendedOpenPositionData>,
+    pacifica_open_positions: &Vec<PacificaOpenPositionData>,
 ) -> anyhow::Result<()> {
     let extended_result = get_extended_market_data(extended_market_name).await?;
     let pacifica_result = get_pacifica_market_data(pacifica_market_name).await?;
@@ -131,27 +130,17 @@ async fn fetch_market_info(
     println!("Pacific Funding Rate: {}", funding_rate_pacifica);
     println!("Price Spread: {}", price_spread);
 
-    if funding_rate_extended > funding_rate_pacifica {
-        let extended_open_position =
-            get_extended_open_position(extended_market_name, extended_open_positions).await;
-        let pacifica_open_position =
-            get_pacifica_open_position(pacifica_market_name, pacifica_open_positions).await;
+    let extended_open_position =
+        get_extended_open_position(extended_market_name, extended_open_positions).await;
+    let pacifica_open_position =
+        get_pacifica_open_position(pacifica_market_name, pacifica_open_positions).await;
 
-        if funding_rate_extended > 0.0 {
-            //Check if already open order and if it is opposite then close it else open new order
-            // Short on extended and long on pacifica
-        } else {
-            //Check if already open order and if it is opposite then close it else open new order
-            // Long on extended and short on pacifica
-        }
+    if funding_rate_extended > funding_rate_pacifica {
+        // SHORT on extended, LONG on pacifica
+        // This works for all cases
     } else {
-        if funding_rate_pacifica > 0.0 {
-            //Check if already open order and if it is opposite then close it else open new order
-            // Long on extended and short on pacifica
-        } else {
-            //Check if already open order and if it is opposite then close it else open new order
-            // Short on extended and long on pacifica
-        }
+        // LONG on extended, SHORT on pacifica
+        // This works for all cases
     }
 
     Ok(())

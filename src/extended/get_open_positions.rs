@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use anyhow::anyhow;
 
 use crate::extended::structs::{OpenPosition, OpenPositionData};
@@ -25,13 +23,13 @@ pub async fn get_extended_open_positions() -> anyhow::Result<Vec<OpenPositionDat
     Ok(open_positions_data.data)
 }
 
-pub async fn get_extended_open_position(
+pub async fn get_extended_open_position<'a>(
     market_name: &str,
-    open_positions: Arc<Vec<OpenPositionData>>,
-) -> Option<OpenPositionData> {
+    open_positions: &'a Vec<OpenPositionData>,
+) -> Option<&'a OpenPositionData> {
     for position in open_positions.iter() {
         if position.market == market_name {
-            return Some(position.clone());
+            return Some(position);
         }
     }
     None
