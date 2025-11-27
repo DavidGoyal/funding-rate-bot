@@ -2,9 +2,9 @@ use anyhow::anyhow;
 
 use crate::extended::structs::{MarketInfo, MarketInfoData};
 
-pub async fn get_extended_market_data(market_name: &str) -> anyhow::Result<MarketInfoData> {
+pub async fn get_extended_market_data(market_name: &str) -> anyhow::Result<Vec<MarketInfoData>> {
     let url = format!(
-        "https://api.starknet.extended.exchange/api/v1/info/markets/{}/stats",
+        "https://api.starknet.extended.exchange/api/v1/info/markets?market={}",
         market_name
     );
 
@@ -18,7 +18,7 @@ pub async fn get_extended_market_data(market_name: &str) -> anyhow::Result<Marke
         .json::<MarketInfo>()
         .await?;
 
-    if market_data.status.eq("ERROR") || market_data.data.daily_volume.eq("0") {
+    if market_data.status.eq("ERROR") || market_data.data.len() == 0 {
         return Err(anyhow!("Invalid Market Data"));
     }
 

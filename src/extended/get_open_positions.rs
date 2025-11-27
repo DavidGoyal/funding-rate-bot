@@ -16,8 +16,8 @@ pub async fn get_extended_open_positions() -> anyhow::Result<Vec<OpenPositionDat
          .json::<OpenPosition>()
          .await?;
 
-    if open_positions_data.status.eq("ERROR") || open_positions_data.data.len() == 0 {
-        return Err(anyhow!("Invalid Open Positions Data"));
+    if open_positions_data.status.eq("ERROR") {
+        return Err(anyhow!("Failed to get open positions"));
     }
 
     Ok(open_positions_data.data)
