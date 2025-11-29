@@ -6,12 +6,13 @@ use crate::{
         get_market_data::get_extended_market_data,
         get_open_positions::{get_extended_open_position, get_extended_open_positions},
         place_order::place_extended_order,
-        structs::{OpenPositionData as ExtendedOpenPositionData, Side},
+        structs::{OpenPositionData as ExtendedOpenPositionData, Side as ExtendedSide},
     },
     pacifica::{
         get_market_data::get_pacifica_market_data,
         get_open_positions::{get_pacifica_open_position, get_pacifica_open_positions},
-        structs::OpenPositionData as PacificaOpenPositionData,
+        place_order::place_pacifica_order,
+        structs::{OpenPositionData as PacificaOpenPositionData, Side as PacificaSide},
     },
 };
 
@@ -28,41 +29,41 @@ async fn main() -> anyhow::Result<()> {
 
     let mut interval = interval(Duration::from_secs(30));
     let extended_market_names = vec![
-        // String::from("ETH-USD"),
+        String::from("ETH-USD"),
         String::from("HYPE-USD"),
-        // String::from("1000BONK-USD"),
-        // String::from("1000PEPE-USD"),
-        // String::from("PENGU-USD"),
-        // String::from("DOGE-USD"),
-        // String::from("UNI-USD"),
-        // String::from("SOL-USD"),
-        // String::from("PUMP-USD"),
-        // String::from("XRP-USD"),
-        // String::from("ASTER-USD"),
-        // String::from("AVAX-USD"),
-        // String::from("TRUMP-USD"),
-        // String::from("SUI-USD"),
-        // String::from("FARTCOIN-USD"),
-        // String::from("LINK-USD"),
+        String::from("1000BONK-USD"),
+        String::from("1000PEPE-USD"),
+        String::from("PENGU-USD"),
+        String::from("DOGE-USD"),
+        String::from("UNI-USD"),
+        String::from("SOL-USD"),
+        String::from("PUMP-USD"),
+        String::from("XRP-USD"),
+        String::from("ASTER-USD"),
+        String::from("AVAX-USD"),
+        String::from("TRUMP-USD"),
+        String::from("SUI-USD"),
+        String::from("FARTCOIN-USD"),
+        String::from("LINK-USD"),
     ];
 
     let pacifica_market_names = vec![
-        // String::from("ETH"),
+        String::from("ETH"),
         String::from("HYPE"),
-        // String::from("kBONK"),
-        // String::from("kPEPE"),
-        // String::from("PENGU"),
-        // String::from("DOGE"),
-        // String::from("UNI"),
-        // String::from("SOL"),
-        // String::from("PUMP"),
-        // String::from("XRP"),
-        // String::from("ASTER"),
-        // String::from("AVAX"),
-        // String::from("TRUMP"),
-        // String::from("SUI"),
-        // String::from("FARTCOIN"),
-        // String::from("LINK"),
+        String::from("kBONK"),
+        String::from("kPEPE"),
+        String::from("PENGU"),
+        String::from("DOGE"),
+        String::from("UNI"),
+        String::from("SOL"),
+        String::from("PUMP"),
+        String::from("XRP"),
+        String::from("ASTER"),
+        String::from("AVAX"),
+        String::from("TRUMP"),
+        String::from("SUI"),
+        String::from("FARTCOIN"),
+        String::from("LINK"),
     ];
 
     loop {
@@ -104,7 +105,7 @@ async fn fetch_market_info(
     let funding_rate_extended = extended_result.market_stats.funding_rate.parse::<f64>()? * 100.0;
     let funding_rate_pacifica = pacifica_result.next_funding.parse::<f64>()? * 100.0;
 
-    let price_extended = extended_result.market_stats.ask_price.parse::<f64>()?;
+    let price_extended = extended_result.market_stats.bid_price.parse::<f64>()?;
     let price_pacifica = pacifica_result.mid.parse::<f64>()?;
 
     let price_spread = if price_extended > price_pacifica {
@@ -117,31 +118,31 @@ async fn fetch_market_info(
 
     let funding_rate_diff = (funding_rate_extended - funding_rate_pacifica).abs();
 
-    // if price_spread > PRICE_SPREAD_THRESHOLD || funding_rate_diff < FUNDING_RATE_THRESHOLD {
-    //     println!("Price Spread: {}", price_spread);
-    //     println!("Funding Rate Diff: {}", funding_rate_diff);
+    if price_spread > PRICE_SPREAD_THRESHOLD || funding_rate_diff < FUNDING_RATE_THRESHOLD {
+        println!("Price Spread: {}", price_spread);
+        println!("Funding Rate Diff: {}", funding_rate_diff);
 
-    //     return Err(anyhow::anyhow!(
-    //         "Price Spread or Funding Rate Diff is too high"
-    //     ));
-    // }
+        return Err(anyhow::anyhow!(
+            "Price Spread or Funding Rate Diff is too high"
+        ));
+    }
 
-    // println!("Extended Funding Rate: {}", funding_rate_extended);
-    // println!("Pacific Funding Rate: {}", funding_rate_pacifica);
-    // println!("Price Spread: {}", price_spread);
+    println!("Extended Funding Rate: {}", funding_rate_extended);
+    println!("Pacific Funding Rate: {}", funding_rate_pacifica);
+    println!("Price Spread: {}", price_spread);
 
     let extended_open_position =
         get_extended_open_position(extended_market_name, extended_open_positions).await;
     let pacifica_open_position =
         get_pacifica_open_position(pacifica_market_name, pacifica_open_positions).await;
 
-    // place_extended_order(
-    //     &extended_market_name,
-    //     &extended_result,
-    //     Side::Sell,
-    //     extended_open_position.unwrap().size.parse::<f64>()?,
-    // )
-    // .await?;
+    place_extended_order(
+        &extended_market_name,
+        &extended_result,
+        ExtendedSide::Buy,
+        0.1,
+    )
+    .await?;
 
     if funding_rate_extended > funding_rate_pacifica {
         // Target: SHORT on extended, LONG on pacifica
@@ -155,14 +156,42 @@ async fn fetch_market_info(
                 if let Some(ext_pos) = &extended_open_position {
                     if ext_pos.side == "LONG" {
                         // Close long
+                        place_extended_order(
+                            &extended_market_name,
+                            &extended_result,
+                            ExtendedSide::Sell,
+                            ext_pos.size.parse::<f64>()?,
+                        )
+                        .await?;
                     }
                 }
                 if let Some(pac_pos) = &pacifica_open_position {
                     if pac_pos.side == "SHORT" {
                         // Close short
+                        place_pacifica_order(
+                            pacifica_market_name,
+                            PacificaSide::Ask,
+                            pac_pos.amount.parse::<f64>()?,
+                            &price_pacifica,
+                        )
+                        .await?;
                     }
                 }
                 // SHORT on extended, LONG on pacifica
+                place_extended_order(
+                    &extended_market_name,
+                    &extended_result,
+                    ExtendedSide::Sell,
+                    0.1,
+                )
+                .await?;
+                place_pacifica_order(
+                    pacifica_market_name,
+                    PacificaSide::Ask,
+                    0.1,
+                    &price_pacifica,
+                )
+                .await?;
             }
         }
     } else {
@@ -177,14 +206,42 @@ async fn fetch_market_info(
                 if let Some(ext_pos) = &extended_open_position {
                     if ext_pos.side == "SHORT" {
                         // Close short
+                        place_extended_order(
+                            &extended_market_name,
+                            &extended_result,
+                            ExtendedSide::Buy,
+                            ext_pos.size.parse::<f64>()?,
+                        )
+                        .await?;
                     }
                 }
                 if let Some(pac_pos) = &pacifica_open_position {
                     if pac_pos.side == "LONG" {
                         // Close long
+                        place_pacifica_order(
+                            pacifica_market_name,
+                            PacificaSide::Ask,
+                            pac_pos.amount.parse::<f64>()?,
+                            &price_pacifica,
+                        )
+                        .await?;
                     }
                 }
                 // LONG on extended, SHORT on pacifica
+                place_extended_order(
+                    &extended_market_name,
+                    &extended_result,
+                    ExtendedSide::Buy,
+                    0.1,
+                )
+                .await?;
+                place_pacifica_order(
+                    pacifica_market_name,
+                    PacificaSide::Ask,
+                    0.1,
+                    &price_pacifica,
+                )
+                .await?;
             }
         }
     }

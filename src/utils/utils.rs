@@ -26,13 +26,13 @@ pub fn round_to_min_change_f64(
     let result = rounded * min_change;
 
     // Get decimal places of min_change
-    let decimal_places = get_decimal_places(min_change);
+    let decimal_places = get_decimal_places(&min_change);
 
     // Round to the same decimal places as min_change
     round_to_decimal_places(result, decimal_places)
 }
 
-fn get_decimal_places(value: f64) -> u32 {
+fn get_decimal_places(value: &f64) -> u32 {
     let s = format!("{:.10}", value);
     let parts: Vec<&str> = s.split('.').collect();
 
@@ -47,4 +47,20 @@ fn get_decimal_places(value: f64) -> u32 {
 fn round_to_decimal_places(value: f64, decimal_places: u32) -> f64 {
     let multiplier = 10_f64.powi(decimal_places as i32);
     (value * multiplier).round() / multiplier
+}
+
+pub fn calc_entire_position_size(
+    price: &f64,
+    min_order_size_change: &f64,
+    max_position_value: &f64,
+) -> f64 {
+    // Calculate: maxPositionValue * 50 / price
+    let result = max_position_value * 50.0 / price;
+
+    // Get decimal places of min_order_size_change
+    let decimal_places = get_decimal_places(min_order_size_change);
+
+    // Round down to the same decimal places as min_order_size_change
+    let multiplier = 10_f64.powi(decimal_places as i32);
+    (result * multiplier).floor() / multiplier
 }

@@ -1,6 +1,6 @@
 use crate::{
-    extended::structs::PlaceOrderResponse,
-    utils::utils::{RoundingMode, round_to_min_change_f64},
+    extended::structs::{PlaceOrderResponse, StopLoss, TakeProfit},
+    utils::utils::{RoundingMode, calc_entire_position_size, round_to_min_change_f64},
 };
 use reqwest::Client;
 use starknet::core::types::Felt;
@@ -32,7 +32,7 @@ pub async fn place_extended_order(
     let order_price = if matches!(side, Side::Buy) {
         market
             .market_stats
-            .ask_price
+            .bid_price
             .parse::<f64>()
             .unwrap()
             .mul(1.0 + SLIPPAGE)
@@ -71,6 +71,7 @@ pub async fn place_extended_order(
             Some(RoundingMode::Floor),
         ),
         &ctx,
+        order_price,
     )
     .await?;
     println!(
@@ -163,9 +164,89 @@ pub async fn create_order(
     qty: &f64,
     price: &f64,
     ctx: &OrderContext,
+    normal_price: f64,
 ) -> Result<PlaceOrder, anyhow::Error> {
     let nonce = rand::random_range(0..u32::MAX);
     let expiry_epoch_millis = chrono::Utc::now().timestamp_millis() as u64 + 1000 * 60 * 60;
+
+    let min_order_size_change = ctx.min_order_size_change.parse::<f64>().unwrap();
+    let rounding_mode = RoundingMode::Floor;
+
+    let tp_trigger_price = round_to_min_change_f64(
+        if matches!(&side, &Side::Buy) {
+            normal_price * 1.05
+        } else {
+            normal_price * 0.95
+        },
+        min_order_size_change,
+        Some(rounding_mode),
+    );
+    let tp_price = round_to_min_change_f64(
+        if matches!(&side, &Side::Buy) {
+            normal_price * 1.055
+        } else {
+            normal_price * 0.945
+        },
+        min_order_size_change,
+        Some(rounding_mode),
+    );
+    let sl_trigger_price = round_to_min_change_f64(
+        if matches!(&side, &Side::Buy) {
+            normal_price * 0.95
+        } else {
+            normal_price * 1.05
+        },
+        min_order_size_change,
+        Some(rounding_mode),
+    );
+    let sl_price = round_to_min_change_f64(
+        if matches!(&side, &Side::Buy) {
+            normal_price * 0.945
+        } else {
+            normal_price * 1.055
+        },
+        min_order_size_change,
+        Some(rounding_mode),
+    );
+
+    let tp_sl_side = if matches!(&side, &Side::Buy) {
+        Side::Sell
+    } else {
+        Side::Buy
+    };
+
+    let tp_amount_of_synthetic = calc_entire_position_size(
+        &tp_price,
+        &ctx.min_order_size_change.parse::<f64>().unwrap(),
+        &ctx.max_position_value.parse::<f64>().unwrap(),
+    );
+    let sl_amount_of_synthetic = calc_entire_position_size(
+        &sl_price,
+        &ctx.min_order_size_change.parse::<f64>().unwrap(),
+        &ctx.max_position_value.parse::<f64>().unwrap(),
+    );
+
+    let create_tp_order_params = get_create_order_params(
+        &tp_sl_side,
+        &tp_amount_of_synthetic,
+        &tp_price,
+        &expiry_epoch_millis,
+        &nonce,
+        &ctx.fee_rate.parse::<f64>().unwrap(),
+        ctx,
+    )
+    .await?;
+
+    let create_sl_order_params = get_create_order_params(
+        &tp_sl_side,
+        &sl_amount_of_synthetic,
+        &sl_price,
+        &expiry_epoch_millis,
+        &nonce,
+        &ctx.fee_rate.parse::<f64>().unwrap(),
+        ctx,
+    )
+    .await?;
 
     let create_order_params = get_create_order_params(
         &side,
@@ -193,9 +274,24 @@ pub async fn create_order(
         nonce: nonce.to_string(),
         settlement: create_order_params.order_signature,
         self_trade_protection_level: "ACCOUNT".to_string(),
-        take_profit: None,
-        stop_loss: None,
         debugging_amounts: create_order_params.debug_amounts,
+        tp_sl_type: "POSITION".to_string(),
+        take_profit: Some(TakeProfit {
+            trigger_price: tp_trigger_price.to_string(),
+            trigger_price_type: "LAST".to_string(),
+            price: tp_price.to_string(),
+            price_type: "MARKET".to_string(),
+            settlement: create_tp_order_params.order_signature,
+            debugging_amounts: create_tp_order_params.debug_amounts,
+        }),
+        stop_loss: Some(StopLoss {
+            trigger_price: sl_trigger_price.to_string(),
+            trigger_price_type: "LAST".to_string(),
+            price: sl_price.to_string(),
+            price_type: "MARKET".to_string(),
+            settlement: create_sl_order_params.order_signature,
+            debugging_amounts: create_sl_order_params.debug_amounts,
+        }),
     })
 }
 

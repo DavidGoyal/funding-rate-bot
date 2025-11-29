@@ -93,6 +93,7 @@ pub struct PlaceOrder {
     pub nonce: String,
     pub settlement: Settlement,
     pub self_trade_protection_level: String,
+    pub tp_sl_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub take_profit: Option<TakeProfit>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -133,17 +134,23 @@ pub struct Signature {
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TakeProfit {
-    pub take_profit_type: String,
-    pub take_profit_price: String,
-    pub take_profit_time: u64,
+    pub trigger_price: String,
+    pub trigger_price_type: String,
+    pub price: String,
+    pub price_type: String,
+    pub settlement: Settlement,
+    pub debugging_amounts: DebuggingAmounts,
 }
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct StopLoss {
-    pub stop_loss_type: String,
-    pub stop_loss_price: String,
-    pub stop_loss_time: u64,
+    pub trigger_price: String,
+    pub trigger_price_type: String,
+    pub price: String,
+    pub price_type: String,
+    pub settlement: Settlement,
+    pub debugging_amounts: DebuggingAmounts,
 }
 
 #[derive(Serialize, Debug)]
