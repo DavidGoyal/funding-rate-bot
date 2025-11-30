@@ -1,9 +1,16 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
-pub struct MarketInfo {
+pub struct MarketPricesInfo {
     pub success: bool,
-    pub data: Vec<MarketInfoData>,
+    pub data: Vec<MarketPricesInfoData>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct MarketPricesInfoData {
+    pub mid: String,
+    pub next_funding: String,
+    pub symbol: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -11,6 +18,29 @@ pub struct MarketInfoData {
     pub mid: String,
     pub next_funding: String,
     pub symbol: String,
+    pub tick_size: String,
+    pub min_tick: String,
+    pub max_tick: String,
+    pub lot_size: String,
+    pub min_order_size: String,
+    pub max_order_size: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct MarketTradingInfo {
+    pub success: bool,
+    pub data: Vec<MarketTradingInfoData>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct MarketTradingInfoData {
+    pub symbol: String,
+    pub tick_size: String,
+    pub min_tick: String,
+    pub max_tick: String,
+    pub lot_size: String,
+    pub min_order_size: String,
+    pub max_order_size: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -101,4 +131,16 @@ impl SignedMessage {
 pub enum Side {
     Bid,
     Ask,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TradeableBalance {
+    pub success: bool,
+    pub data: TradeableBalanceData,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TradeableBalanceData {
+    pub balance: String,
+    pub available_to_spend: String,
 }

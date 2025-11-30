@@ -22,15 +22,3 @@ pub async fn get_extended_open_positions() -> anyhow::Result<Vec<OpenPositionDat
 
     Ok(open_positions_data.data)
 }
-
-pub async fn get_extended_open_position<'a>(
-    market_name: &str,
-    open_positions: &'a Vec<OpenPositionData>,
-) -> Option<&'a OpenPositionData> {
-    for position in open_positions.iter() {
-        if position.market == market_name {
-            return Some(position);
-        }
-    }
-    None
-}

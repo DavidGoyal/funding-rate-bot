@@ -3,7 +3,8 @@ use solana_sdk::{signature::Keypair, signer::Signer};
 
 use crate::{
     pacifica::structs::{
-        PlaceOrder, Side, SignatureHeader, SignaturePayload, SignedMessage, StopLoss, TakeProfit,
+        MarketInfoData, PlaceOrder, Side, SignatureHeader, SignaturePayload, SignedMessage,
+        StopLoss, TakeProfit,
     },
     utils::utils::{RoundingMode, round_to_min_change_f64},
 };
@@ -14,7 +15,7 @@ pub async fn place_pacifica_order(
     market_name: &str,
     side: Side,
     qty: f64,
-    market_price: &f64,
+    market_info: &MarketInfoData,
 ) -> anyhow::Result<()> {
     let private_key = std::env::var("PACIFICA_PRIVATE_KEY").unwrap();
 
@@ -23,10 +24,23 @@ pub async fn place_pacifica_order(
 
     let current_timestamp = Utc::now().timestamp_millis();
 
-    let take_profit_price =
-        round_to_min_change_f64(market_price * 1.05, 0.001, Some(RoundingMode::Ceil));
-    let stop_loss_price =
-        round_to_min_change_f64(market_price * 0.95, 0.001, Some(RoundingMode::Floor));
+    let market_price = market_info.mid.parse::<f64>()?;
+    let qty = round_to_min_change_f64(
+        qty,
+        market_info.lot_size.parse::<f64>()?,
+        Some(RoundingMode::Floor),
+    );
+
+    let take_profit_price = round_to_min_change_f64(
+        market_price * 1.05,
+        market_info.tick_size.parse::<f64>()?,
+        Some(RoundingMode::Ceil),
+    );
+    let stop_loss_price = round_to_min_change_f64(
+        market_price * 0.95,
+        market_info.tick_size.parse::<f64>()?,
+        Some(RoundingMode::Floor),
+    );
 
     let signature_header = SignatureHeader {
         timestamp: current_timestamp as u64,
@@ -73,13 +87,13 @@ pub async fn place_pacifica_order(
         .post("https://api.pacifica.fi/api/v1/orders/create_market")
         .json(&place_order)
         .send()
-        .await?
-        .text()
         .await?;
 
-    println!("Response: {}", response);
-
-    Ok(())
+    if response.status().is_success() {
+        return Ok(());
+    } else {
+        return Err(anyhow::anyhow!("Failed to place order"));
+    }
 }
 
 pub async fn sign_message(

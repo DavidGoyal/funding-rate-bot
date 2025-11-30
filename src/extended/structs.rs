@@ -92,7 +92,6 @@ pub struct PlaceOrder {
     pub fee: String,
     pub nonce: String,
     pub settlement: Settlement,
-    pub self_trade_protection_level: String,
     pub tp_sl_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub take_profit: Option<TakeProfit>,
@@ -199,6 +198,7 @@ pub struct OrderContext {
     pub settlement_resolution_collateral: String,
     pub settlement_resolution_synthetic: String,
     pub min_order_size_change: String,
+    pub min_price_change: String,
     pub max_position_value: String,
     pub fee_rate: String,
     pub vault_id: String,
@@ -209,4 +209,18 @@ pub struct OrderContext {
 #[derive(Deserialize, Debug)]
 pub struct PlaceOrderResponse {
     pub status: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TradeableBalance {
+    pub status: String,
+    pub data: TradeableBalanceData,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TradeableBalanceData {
+    pub balance: String,
+    pub available_for_trade: String,
 }

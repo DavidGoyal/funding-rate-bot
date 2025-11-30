@@ -11,7 +11,7 @@ use crate::extended::structs::{
     OrderContext, PlaceOrder, Settlement, Side, Signature, StarknetDomain, StarknetDomainData,
 };
 
-const SLIPPAGE: f64 = 0.001;
+const SLIPPAGE: f64 = 0.01;
 const STARKNET_SETTLEMENT_BUFFER_SECONDS: u64 = 14 * 24 * 60 * 60;
 const MILLIS_IN_SECOND: u64 = 1_000;
 
@@ -86,15 +86,16 @@ pub async fn place_extended_order(
         .header("X-Api-Key", &api_key)
         .send()
         .await?
-        .json::<PlaceOrderResponse>()
+        .text()
         .await?;
 
-    println!("Response: {:?}", response);
-    if response.status.eq("OK") {
-        return Ok(());
+    println!("Response: {}", response);
+
+    if response.contains("ERROR") {
+        return Err(anyhow::anyhow!("Failed to place order"));
     }
 
-    Err(anyhow::anyhow!("Failed to place order"))
+    Ok(())
 }
 
 pub async fn get_fees(
@@ -150,6 +151,7 @@ pub async fn create_order_context(
         settlement_resolution_collateral: market.l2_config.collateral_resolution.to_string(),
         settlement_resolution_synthetic: market.l2_config.synthetic_resolution.to_string(),
         min_order_size_change: market.trading_config.min_order_size_change.to_string(),
+        min_price_change: market.trading_config.min_price_change.to_string(),
         max_position_value: market.trading_config.max_position_value.to_string(),
         fee_rate: fees.taker_fee_rate.to_string(),
         vault_id: vault_id.to_string(),
@@ -169,51 +171,46 @@ pub async fn create_order(
     let nonce = rand::random_range(0..u32::MAX);
     let expiry_epoch_millis = chrono::Utc::now().timestamp_millis() as u64 + 1000 * 60 * 60;
 
-    let min_order_size_change = ctx.min_order_size_change.parse::<f64>().unwrap();
+    let min_price_change = ctx.min_price_change.parse::<f64>().unwrap();
     let rounding_mode = RoundingMode::Floor;
+    let is_buying = matches!(&side, &Side::Buy);
 
     let tp_trigger_price = round_to_min_change_f64(
-        if matches!(&side, &Side::Buy) {
+        if is_buying {
             normal_price * 1.05
         } else {
             normal_price * 0.95
         },
-        min_order_size_change,
+        min_price_change,
         Some(rounding_mode),
     );
     let tp_price = round_to_min_change_f64(
-        if matches!(&side, &Side::Buy) {
-            normal_price * 1.055
+        if is_buying {
+            normal_price * 1.045
         } else {
-            normal_price * 0.945
+            normal_price * 0.965
         },
-        min_order_size_change,
+        min_price_change,
         Some(rounding_mode),
     );
     let sl_trigger_price = round_to_min_change_f64(
-        if matches!(&side, &Side::Buy) {
+        if is_buying {
             normal_price * 0.95
         } else {
             normal_price * 1.05
         },
-        min_order_size_change,
+        min_price_change,
         Some(rounding_mode),
     );
     let sl_price = round_to_min_change_f64(
-        if matches!(&side, &Side::Buy) {
+        if is_buying {
             normal_price * 0.945
         } else {
             normal_price * 1.055
         },
-        min_order_size_change,
+        min_price_change,
         Some(rounding_mode),
     );
-
-    let tp_sl_side = if matches!(&side, &Side::Buy) {
-        Side::Sell
-    } else {
-        Side::Buy
-    };
 
     let tp_amount_of_synthetic = calc_entire_position_size(
         &tp_price,
@@ -227,35 +224,35 @@ pub async fn create_order(
     );
 
     let create_tp_order_params = get_create_order_params(
-        &tp_sl_side,
         &tp_amount_of_synthetic,
         &tp_price,
         &expiry_epoch_millis,
         &nonce,
         &ctx.fee_rate.parse::<f64>().unwrap(),
         ctx,
+        !is_buying,
     )
     .await?;
 
     let create_sl_order_params = get_create_order_params(
-        &tp_sl_side,
         &sl_amount_of_synthetic,
         &sl_price,
         &expiry_epoch_millis,
         &nonce,
         &ctx.fee_rate.parse::<f64>().unwrap(),
         ctx,
+        !is_buying,
     )
     .await?;
 
     let create_order_params = get_create_order_params(
-        &side,
         &qty,
         price,
         &expiry_epoch_millis,
         &nonce,
         &ctx.fee_rate.parse::<f64>().unwrap(),
         ctx,
+        is_buying,
     )
     .await?;
 
@@ -273,7 +270,6 @@ pub async fn create_order(
         fee: ctx.fee_rate.to_string(),
         nonce: nonce.to_string(),
         settlement: create_order_params.order_signature,
-        self_trade_protection_level: "ACCOUNT".to_string(),
         debugging_amounts: create_order_params.debug_amounts,
         tp_sl_type: "POSITION".to_string(),
         take_profit: Some(TakeProfit {
@@ -296,18 +292,18 @@ pub async fn create_order(
 }
 
 pub async fn get_create_order_params(
-    side: &Side,
     amount_of_synthetic: &f64,
     price: &f64,
     expiry_epoch_millis: &u64,
     nonce: &u32,
     total_fee_rate: &f64,
     ctx: &OrderContext,
+    is_buying: bool,
 ) -> Result<CreateOrderParams, anyhow::Error> {
     let collateral_amount = amount_of_synthetic.mul(price);
     let fee = total_fee_rate.mul(collateral_amount);
 
-    let collateral_amount_stark = if matches!(side, Side::Buy) {
+    let collateral_amount_stark = if is_buying {
         collateral_amount
             .mul(ctx.settlement_resolution_collateral.parse::<f64>().unwrap())
             .ceil()
@@ -320,7 +316,7 @@ pub async fn get_create_order_params(
     let fee_stark = fee
         .mul(ctx.settlement_resolution_collateral.parse::<f64>().unwrap())
         .ceil();
-    let synthetic_amount_stark = if matches!(side, Side::Buy) {
+    let synthetic_amount_stark = if is_buying {
         amount_of_synthetic
             .mul(ctx.settlement_resolution_synthetic.parse::<f64>().unwrap())
             .ceil()
@@ -333,7 +329,6 @@ pub async fn get_create_order_params(
     let stark_public_key = std::env::var("EXTENDED_STARK_PUBLIC_KEY").unwrap();
 
     let order_hash = get_starknet_order_msg_hash(
-        side,
         nonce,
         &ctx.asset_id_collateral,
         &ctx.asset_id_synthetic,
@@ -344,6 +339,7 @@ pub async fn get_create_order_params(
         &ctx.vault_id,
         &stark_public_key.to_string(),
         &ctx.starknet_domain,
+        is_buying,
     )
     .await?;
 
@@ -367,7 +363,6 @@ pub async fn get_create_order_params(
 }
 
 pub async fn get_starknet_order_msg_hash(
-    side: &Side,
     nonce: &u32,
     asset_id_collateral: &str,
     asset_id_synthetic: &str,
@@ -378,8 +373,8 @@ pub async fn get_starknet_order_msg_hash(
     vault_id: &str,
     stark_public_key: &str,
     starknet_domain: &StarknetDomainData,
+    is_buying_synthetic: bool,
 ) -> Result<Felt, anyhow::Error> {
-    let is_buying_synthetic = matches!(side, Side::Buy);
     let expiration_timestamp = expiry_epoch_millis
         .div_ceil(MILLIS_IN_SECOND)
         .add(STARKNET_SETTLEMENT_BUFFER_SECONDS);

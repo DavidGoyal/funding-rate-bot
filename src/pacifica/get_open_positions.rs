@@ -25,15 +25,3 @@ pub async fn get_pacifica_open_positions() -> anyhow::Result<Vec<OpenPositionDat
 
     Ok(open_orders_data.data)
 }
-
-pub async fn get_pacifica_open_position<'a>(
-    market_name: &str,
-    open_positions: &'a Vec<OpenPositionData>,
-) -> Option<&'a OpenPositionData> {
-    for position in open_positions.iter() {
-        if position.symbol == market_name {
-            return Some(position);
-        }
-    }
-    None
-}
