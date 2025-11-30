@@ -20,6 +20,7 @@ pub async fn place_extended_order(
     market: &MarketInfoData,
     side: Side,
     qty: f64,
+    tp_sl_included: bool,
 ) -> anyhow::Result<()> {
     let api_key = std::env::var("EXTENDED_API_KEY").unwrap();
     let stark_private_key = std::env::var("EXTENDED_STARK_PRIVATE_KEY").unwrap();
@@ -72,6 +73,7 @@ pub async fn place_extended_order(
         ),
         &ctx,
         order_price,
+        tp_sl_included,
     )
     .await?;
     println!(
@@ -167,128 +169,163 @@ pub async fn create_order(
     price: &f64,
     ctx: &OrderContext,
     normal_price: f64,
+    tp_sl_included: bool,
 ) -> Result<PlaceOrder, anyhow::Error> {
     let nonce = rand::random_range(0..u32::MAX);
     let expiry_epoch_millis = chrono::Utc::now().timestamp_millis() as u64 + 1000 * 60 * 60;
 
-    let min_price_change = ctx.min_price_change.parse::<f64>().unwrap();
-    let rounding_mode = RoundingMode::Floor;
     let is_buying = matches!(&side, &Side::Buy);
 
-    let tp_trigger_price = round_to_min_change_f64(
-        if is_buying {
-            normal_price * 1.05
-        } else {
-            normal_price * 0.95
-        },
-        min_price_change,
-        Some(rounding_mode),
-    );
-    let tp_price = round_to_min_change_f64(
-        if is_buying {
-            normal_price * 1.045
-        } else {
-            normal_price * 0.965
-        },
-        min_price_change,
-        Some(rounding_mode),
-    );
-    let sl_trigger_price = round_to_min_change_f64(
-        if is_buying {
-            normal_price * 0.95
-        } else {
-            normal_price * 1.05
-        },
-        min_price_change,
-        Some(rounding_mode),
-    );
-    let sl_price = round_to_min_change_f64(
-        if is_buying {
-            normal_price * 0.945
-        } else {
-            normal_price * 1.055
-        },
-        min_price_change,
-        Some(rounding_mode),
-    );
+    if tp_sl_included {
+        let rounding_mode = RoundingMode::Floor;
+        let min_price_change = ctx.min_price_change.parse::<f64>().unwrap();
 
-    let tp_amount_of_synthetic = calc_entire_position_size(
-        &tp_price,
-        &ctx.min_order_size_change.parse::<f64>().unwrap(),
-        &ctx.max_position_value.parse::<f64>().unwrap(),
-    );
-    let sl_amount_of_synthetic = calc_entire_position_size(
-        &sl_price,
-        &ctx.min_order_size_change.parse::<f64>().unwrap(),
-        &ctx.max_position_value.parse::<f64>().unwrap(),
-    );
+        let tp_trigger_price = round_to_min_change_f64(
+            if is_buying {
+                normal_price * 1.05
+            } else {
+                normal_price * 0.95
+            },
+            min_price_change,
+            Some(rounding_mode),
+        );
+        let tp_price = round_to_min_change_f64(
+            if is_buying {
+                normal_price * 1.045
+            } else {
+                normal_price * 0.965
+            },
+            min_price_change,
+            Some(rounding_mode),
+        );
+        let sl_trigger_price = round_to_min_change_f64(
+            if is_buying {
+                normal_price * 0.95
+            } else {
+                normal_price * 1.05
+            },
+            min_price_change,
+            Some(rounding_mode),
+        );
+        let sl_price = round_to_min_change_f64(
+            if is_buying {
+                normal_price * 0.945
+            } else {
+                normal_price * 1.055
+            },
+            min_price_change,
+            Some(rounding_mode),
+        );
 
-    let create_tp_order_params = get_create_order_params(
-        &tp_amount_of_synthetic,
-        &tp_price,
-        &expiry_epoch_millis,
-        &nonce,
-        &ctx.fee_rate.parse::<f64>().unwrap(),
-        ctx,
-        !is_buying,
-    )
-    .await?;
+        let tp_amount_of_synthetic = calc_entire_position_size(
+            &tp_price,
+            &ctx.min_order_size_change.parse::<f64>().unwrap(),
+            &ctx.max_position_value.parse::<f64>().unwrap(),
+        );
+        let sl_amount_of_synthetic = calc_entire_position_size(
+            &sl_price,
+            &ctx.min_order_size_change.parse::<f64>().unwrap(),
+            &ctx.max_position_value.parse::<f64>().unwrap(),
+        );
 
-    let create_sl_order_params = get_create_order_params(
-        &sl_amount_of_synthetic,
-        &sl_price,
-        &expiry_epoch_millis,
-        &nonce,
-        &ctx.fee_rate.parse::<f64>().unwrap(),
-        ctx,
-        !is_buying,
-    )
-    .await?;
+        let create_tp_order_params = get_create_order_params(
+            &tp_amount_of_synthetic,
+            &tp_price,
+            &expiry_epoch_millis,
+            &nonce,
+            &ctx.fee_rate.parse::<f64>().unwrap(),
+            ctx,
+            !is_buying,
+        )
+        .await?;
 
-    let create_order_params = get_create_order_params(
-        &qty,
-        price,
-        &expiry_epoch_millis,
-        &nonce,
-        &ctx.fee_rate.parse::<f64>().unwrap(),
-        ctx,
-        is_buying,
-    )
-    .await?;
+        let create_sl_order_params = get_create_order_params(
+            &sl_amount_of_synthetic,
+            &sl_price,
+            &expiry_epoch_millis,
+            &nonce,
+            &ctx.fee_rate.parse::<f64>().unwrap(),
+            ctx,
+            !is_buying,
+        )
+        .await?;
 
-    Ok(PlaceOrder {
-        id: create_order_params.order_hash,
-        market: market_name.to_string(),
-        side: side,
-        qty: qty.to_string(),
-        r#type: "MARKET".to_string(),
-        price: price.to_string(),
-        reduce_only: false,
-        post_only: false,
-        time_in_force: "IOC".to_string(),
-        expiry_epoch_millis: expiry_epoch_millis,
-        fee: ctx.fee_rate.to_string(),
-        nonce: nonce.to_string(),
-        settlement: create_order_params.order_signature,
-        debugging_amounts: create_order_params.debug_amounts,
-        tp_sl_type: "POSITION".to_string(),
-        take_profit: Some(TakeProfit {
-            trigger_price: tp_trigger_price.to_string(),
-            trigger_price_type: "LAST".to_string(),
-            price: tp_price.to_string(),
-            price_type: "MARKET".to_string(),
-            settlement: create_tp_order_params.order_signature,
-            debugging_amounts: create_tp_order_params.debug_amounts,
-        }),
-        stop_loss: Some(StopLoss {
-            trigger_price: sl_trigger_price.to_string(),
-            trigger_price_type: "LAST".to_string(),
-            price: sl_price.to_string(),
-            price_type: "MARKET".to_string(),
-            settlement: create_sl_order_params.order_signature,
-            debugging_amounts: create_sl_order_params.debug_amounts,
-        }),
-    })
+        let create_order_params = get_create_order_params(
+            &qty,
+            price,
+            &expiry_epoch_millis,
+            &nonce,
+            &ctx.fee_rate.parse::<f64>().unwrap(),
+            ctx,
+            is_buying,
+        )
+        .await?;
+
+        return Ok(PlaceOrder {
+            id: create_order_params.order_hash,
+            market: market_name.to_string(),
+            side: side,
+            qty: qty.to_string(),
+            r#type: "MARKET".to_string(),
+            price: price.to_string(),
+            reduce_only: false,
+            post_only: false,
+            time_in_force: "IOC".to_string(),
+            expiry_epoch_millis: expiry_epoch_millis,
+            fee: ctx.fee_rate.to_string(),
+            nonce: nonce.to_string(),
+            settlement: create_order_params.order_signature,
+            debugging_amounts: create_order_params.debug_amounts,
+            tp_sl_type: "POSITION".to_string(),
+            take_profit: Some(TakeProfit {
+                trigger_price: tp_trigger_price.to_string(),
+                trigger_price_type: "LAST".to_string(),
+                price: tp_price.to_string(),
+                price_type: "MARKET".to_string(),
+                settlement: create_tp_order_params.order_signature,
+                debugging_amounts: create_tp_order_params.debug_amounts,
+            }),
+            stop_loss: Some(StopLoss {
+                trigger_price: sl_trigger_price.to_string(),
+                trigger_price_type: "LAST".to_string(),
+                price: sl_price.to_string(),
+                price_type: "MARKET".to_string(),
+                settlement: create_sl_order_params.order_signature,
+                debugging_amounts: create_sl_order_params.debug_amounts,
+            }),
+        });
+    } else {
+        let create_order_params = get_create_order_params(
+            &qty,
+            price,
+            &expiry_epoch_millis,
+            &nonce,
+            &ctx.fee_rate.parse::<f64>().unwrap(),
+            ctx,
+            is_buying,
+        )
+        .await?;
+
+        return Ok(PlaceOrder {
+            id: create_order_params.order_hash,
+            market: market_name.to_string(),
+            side: side,
+            qty: qty.to_string(),
+            r#type: "MARKET".to_string(),
+            price: price.to_string(),
+            reduce_only: false,
+            post_only: false,
+            time_in_force: "IOC".to_string(),
+            expiry_epoch_millis: expiry_epoch_millis,
+            fee: ctx.fee_rate.to_string(),
+            nonce: nonce.to_string(),
+            settlement: create_order_params.order_signature,
+            debugging_amounts: create_order_params.debug_amounts,
+            tp_sl_type: "POSITION".to_string(),
+            take_profit: None,
+            stop_loss: None,
+        });
+    }
 }
 
 pub async fn get_create_order_params(

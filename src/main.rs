@@ -3,17 +3,21 @@ use tokio::time::{Duration, interval};
 
 use crate::{
     extended::{
-        get_market_data::get_extended_market_data,
-        get_open_positions::get_extended_open_positions,
-        get_tradeable_balance::get_extended_tradeable_balance,
-        place_order::place_extended_order,
+        account::{
+            get_open_positions::get_extended_open_positions,
+            get_tradeable_balance::get_extended_tradeable_balance,
+        },
+        markets::get_market_data::get_extended_market_data,
+        orders::place_order::place_extended_order,
         structs::{OpenPositionData as ExtendedOpenPositionData, Side as ExtendedSide},
     },
     pacifica::{
-        get_market_data::get_pacifica_market_data,
-        get_open_positions::get_pacifica_open_positions,
-        get_tradeable_balance::get_pacifica_tradeable_balance,
-        place_order::place_pacifica_order,
+        account::{
+            get_open_positions::get_pacifica_open_positions,
+            get_tradeable_balance::get_pacifica_tradeable_balance,
+        },
+        markets::get_market_data::get_pacifica_market_data,
+        orders::place_order::place_pacifica_order,
         structs::{OpenPositionData as PacificaOpenPositionData, Side as PacificaSide},
     },
 };
@@ -139,6 +143,7 @@ async fn close_if_necessary(
                 &extended_result,
                 ExtendedSide::Sell,
                 extended_open_position.size.parse::<f64>()?,
+                false,
             )
             .await?;
         } else if extended_open_position.side == "SHORT"
@@ -150,6 +155,7 @@ async fn close_if_necessary(
                 &extended_result,
                 ExtendedSide::Buy,
                 extended_open_position.size.parse::<f64>()?,
+                false,
             )
             .await?;
         }
@@ -161,6 +167,7 @@ async fn close_if_necessary(
                 PacificaSide::Bid,
                 pacifica_open_position.amount.parse::<f64>()?,
                 &pacifica_result,
+                false,
             )
             .await?;
         } else if pacifica_open_position.side == "LONG"
@@ -172,6 +179,7 @@ async fn close_if_necessary(
                 PacificaSide::Ask,
                 pacifica_open_position.amount.parse::<f64>()?,
                 &pacifica_result,
+                false,
             )
             .await?;
         }
@@ -183,6 +191,7 @@ async fn close_if_necessary(
                 &extended_result,
                 ExtendedSide::Buy,
                 extended_open_position.size.parse::<f64>()?,
+                false,
             )
             .await?;
         } else if extended_open_position.side == "LONG"
@@ -194,6 +203,7 @@ async fn close_if_necessary(
                 &extended_result,
                 ExtendedSide::Sell,
                 extended_open_position.size.parse::<f64>()?,
+                false,
             )
             .await?;
         }
@@ -205,6 +215,7 @@ async fn close_if_necessary(
                 PacificaSide::Ask,
                 pacifica_open_position.amount.parse::<f64>()?,
                 &pacifica_result,
+                false,
             )
             .await?;
         } else if pacifica_open_position.side == "SHORT"
@@ -216,6 +227,7 @@ async fn close_if_necessary(
                 PacificaSide::Bid,
                 pacifica_open_position.amount.parse::<f64>()?,
                 &pacifica_result,
+                false,
             )
             .await?;
         }
@@ -293,6 +305,7 @@ async fn place_arb_order(
             &extended_result,
             ExtendedSide::Sell,
             tradeable_amount,
+            true,
         )
         .await?;
         place_pacifica_order(
@@ -300,6 +313,7 @@ async fn place_arb_order(
             PacificaSide::Bid,
             tradeable_amount,
             &pacifica_result,
+            true,
         )
         .await?;
     } else {
@@ -318,6 +332,7 @@ async fn place_arb_order(
             &extended_result,
             ExtendedSide::Buy,
             tradeable_amount,
+            true,
         )
         .await?;
         place_pacifica_order(
@@ -325,6 +340,7 @@ async fn place_arb_order(
             PacificaSide::Ask,
             tradeable_amount,
             &pacifica_result,
+            true,
         )
         .await?;
     }
