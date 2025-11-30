@@ -1,5 +1,5 @@
 use crate::{
-    extended::structs::{PlaceOrderResponse, StopLoss, TakeProfit},
+    extended::structs::{StopLoss, TakeProfit},
     utils::utils::{RoundingMode, calc_entire_position_size, round_to_min_change_f64},
 };
 use reqwest::Client;
@@ -76,10 +76,6 @@ pub async fn place_extended_order(
         tp_sl_included,
     )
     .await?;
-    println!(
-        "Place Order JSON: {}",
-        serde_json::to_string_pretty(&place_order).unwrap()
-    );
 
     let response = client
         .post("https://api.starknet.extended.exchange/api/v1/user/order")
@@ -177,7 +173,11 @@ pub async fn create_order(
     let is_buying = matches!(&side, &Side::Buy);
 
     if tp_sl_included {
-        let rounding_mode = RoundingMode::Floor;
+        let rounding_mode = if is_buying {
+            RoundingMode::Floor
+        } else {
+            RoundingMode::Ceil
+        };
         let min_price_change = ctx.min_price_change.parse::<f64>().unwrap();
 
         let tp_trigger_price = round_to_min_change_f64(
@@ -276,7 +276,7 @@ pub async fn create_order(
             nonce: nonce.to_string(),
             settlement: create_order_params.order_signature,
             debugging_amounts: create_order_params.debug_amounts,
-            tp_sl_type: "POSITION".to_string(),
+            tp_sl_type: Some("POSITION".to_string()),
             take_profit: Some(TakeProfit {
                 trigger_price: tp_trigger_price.to_string(),
                 trigger_price_type: "LAST".to_string(),
@@ -321,7 +321,7 @@ pub async fn create_order(
             nonce: nonce.to_string(),
             settlement: create_order_params.order_signature,
             debugging_amounts: create_order_params.debug_amounts,
-            tp_sl_type: "POSITION".to_string(),
+            tp_sl_type: None,
             take_profit: None,
             stop_loss: None,
         });

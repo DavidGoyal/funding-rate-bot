@@ -31,17 +31,32 @@ pub async fn place_pacifica_order(
         market_info.lot_size.parse::<f64>()?,
         Some(RoundingMode::Floor),
     );
+    let is_buying = matches!(&side, &Side::Bid);
 
     if tp_sl_included {
+        let rounding_mode = if is_buying {
+            RoundingMode::Floor
+        } else {
+            RoundingMode::Ceil
+        };
+
         let take_profit_price = round_to_min_change_f64(
-            market_price * 1.05,
+            if is_buying {
+                market_price * 1.05
+            } else {
+                market_price * 0.95
+            },
             market_info.tick_size.parse::<f64>()?,
-            Some(RoundingMode::Ceil),
+            Some(rounding_mode),
         );
         let stop_loss_price = round_to_min_change_f64(
-            market_price * 0.95,
+            if is_buying {
+                market_price * 0.95
+            } else {
+                market_price * 1.05
+            },
             market_info.tick_size.parse::<f64>()?,
-            Some(RoundingMode::Floor),
+            Some(rounding_mode),
         );
 
         let signature_header = SignatureHeader {
@@ -158,7 +173,6 @@ pub async fn sign_message(
         data: payload.clone(),
     };
     let sorted_message = sort_json_object(&message)?;
-    println!("Sorted Message: {}", sorted_message);
     let signature = keypair.sign_message(sorted_message.as_bytes());
 
     Ok(bs58::encode(signature).into_string())

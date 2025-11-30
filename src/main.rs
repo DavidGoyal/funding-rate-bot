@@ -86,7 +86,7 @@ async fn main() -> anyhow::Result<()> {
                 .iter()
                 .position(|p| *p == extended_open_positions[i].market)
                 .unwrap();
-            close_if_necessary(
+            let result = close_if_necessary(
                 &extended_open_positions[i].market,
                 &pacifica_market_names[pacifica_market_index],
                 &extended_open_positions[i],
@@ -95,7 +95,18 @@ async fn main() -> anyhow::Result<()> {
                     .find(|p| p.symbol == pacifica_market_names[pacifica_market_index])
                     .unwrap(),
             )
-            .await?;
+            .await;
+
+            match result {
+                Ok(_) => println!(
+                    "-------------------------------- Success for market {} --------------------------------",
+                    extended_open_positions[i].market
+                ),
+                Err(e) => println!(
+                    "-------------------------------- Error for market {} --------------------------------: {}",
+                    extended_open_positions[i].market, e
+                ),
+            }
         }
 
         for i in 0..extended_market_names.len() {
@@ -133,8 +144,6 @@ async fn close_if_necessary(
     let funding_rate_extended = extended_result.market_stats.funding_rate.parse::<f64>()? * 100.0;
     let funding_rate_pacifica = pacifica_result.next_funding.parse::<f64>()? * 100.0;
 
-    let funding_rate_diff = (funding_rate_extended.abs() - funding_rate_pacifica.abs()).abs();
-
     if funding_rate_extended > funding_rate_pacifica {
         if extended_open_position.side == "LONG" {
             // Close long
@@ -146,18 +155,6 @@ async fn close_if_necessary(
                 false,
             )
             .await?;
-        } else if extended_open_position.side == "SHORT"
-            && funding_rate_diff < FUNDING_RATE_THRESHOLD
-        {
-            // Close short
-            place_extended_order(
-                &extended_market_name,
-                &extended_result,
-                ExtendedSide::Buy,
-                extended_open_position.size.parse::<f64>()?,
-                false,
-            )
-            .await?;
         }
 
         if pacifica_open_position.side == "SHORT" {
@@ -165,18 +162,6 @@ async fn close_if_necessary(
             place_pacifica_order(
                 pacifica_market_name,
                 PacificaSide::Bid,
-                pacifica_open_position.amount.parse::<f64>()?,
-                &pacifica_result,
-                false,
-            )
-            .await?;
-        } else if pacifica_open_position.side == "LONG"
-            && funding_rate_diff < FUNDING_RATE_THRESHOLD
-        {
-            // Close long
-            place_pacifica_order(
-                pacifica_market_name,
-                PacificaSide::Ask,
                 pacifica_open_position.amount.parse::<f64>()?,
                 &pacifica_result,
                 false,
@@ -194,18 +179,6 @@ async fn close_if_necessary(
                 false,
             )
             .await?;
-        } else if extended_open_position.side == "LONG"
-            && funding_rate_diff < FUNDING_RATE_THRESHOLD
-        {
-            // Close long
-            place_extended_order(
-                &extended_market_name,
-                &extended_result,
-                ExtendedSide::Sell,
-                extended_open_position.size.parse::<f64>()?,
-                false,
-            )
-            .await?;
         }
 
         if pacifica_open_position.side == "LONG" {
@@ -213,18 +186,6 @@ async fn close_if_necessary(
             place_pacifica_order(
                 pacifica_market_name,
                 PacificaSide::Ask,
-                pacifica_open_position.amount.parse::<f64>()?,
-                &pacifica_result,
-                false,
-            )
-            .await?;
-        } else if pacifica_open_position.side == "SHORT"
-            && funding_rate_diff < FUNDING_RATE_THRESHOLD
-        {
-            // Close short
-            place_pacifica_order(
-                pacifica_market_name,
-                PacificaSide::Bid,
                 pacifica_open_position.amount.parse::<f64>()?,
                 &pacifica_result,
                 false,
@@ -262,7 +223,7 @@ async fn place_arb_order(
         price_diff / price_pacifica * 100.0
     };
 
-    let funding_rate_diff = (funding_rate_extended.abs() - funding_rate_pacifica.abs()).abs();
+    let funding_rate_diff = (funding_rate_extended - funding_rate_pacifica).abs();
 
     println!("Extended Funding Rate: {}", funding_rate_extended);
     println!("Pacific Funding Rate: {}", funding_rate_pacifica);
@@ -308,14 +269,26 @@ async fn place_arb_order(
             true,
         )
         .await?;
-        place_pacifica_order(
+        let has_placed = place_pacifica_order(
             pacifica_market_name,
             PacificaSide::Bid,
             tradeable_amount,
             &pacifica_result,
             true,
         )
-        .await?;
+        .await;
+
+        if has_placed.is_err() {
+            place_extended_order(
+                &extended_market_name,
+                &extended_result,
+                ExtendedSide::Buy,
+                tradeable_amount,
+                false,
+            )
+            .await?;
+            return Err(anyhow::anyhow!("Failed to place pacifica order"));
+        }
     } else {
         if price_spread > PRICE_SPREAD_THRESHOLD || funding_rate_diff < FUNDING_RATE_THRESHOLD {
             return Err(anyhow::anyhow!(
@@ -335,14 +308,26 @@ async fn place_arb_order(
             true,
         )
         .await?;
-        place_pacifica_order(
+        let has_placed = place_pacifica_order(
             pacifica_market_name,
             PacificaSide::Ask,
             tradeable_amount,
             &pacifica_result,
             true,
         )
-        .await?;
+        .await;
+
+        if has_placed.is_err() {
+            place_extended_order(
+                &extended_market_name,
+                &extended_result,
+                ExtendedSide::Sell,
+                tradeable_amount,
+                false,
+            )
+            .await?;
+            return Err(anyhow::anyhow!("Failed to place extended order"));
+        }
     }
 
     Ok(())

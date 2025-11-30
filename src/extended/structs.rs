@@ -92,7 +92,8 @@ pub struct PlaceOrder {
     pub fee: String,
     pub nonce: String,
     pub settlement: Settlement,
-    pub tp_sl_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tp_sl_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub take_profit: Option<TakeProfit>,
     #[serde(skip_serializing_if = "Option::is_none")]
