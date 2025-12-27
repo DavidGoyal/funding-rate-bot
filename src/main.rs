@@ -103,7 +103,7 @@ async fn main() -> anyhow::Result<()> {
                     extended_open_positions[i].market
                 ),
                 Err(e) => println!(
-                    "-------------------------------- Error for market {} --------------------------------: {}",
+                    "-------------------------------- Error for market {} : {} --------------------------------",
                     extended_open_positions[i].market, e
                 ),
             }
@@ -119,7 +119,7 @@ async fn main() -> anyhow::Result<()> {
                     extended_market_names[i]
                 ),
                 Err(e) => println!(
-                    "-------------------------------- Error for market {} --------------------------------: {}",
+                    "-------------------------------- Error for market {} : {} --------------------------------",
                     extended_market_names[i], e
                 ),
             }
@@ -202,7 +202,7 @@ async fn place_arb_order(
     pacifica_market_name: &str,
 ) -> anyhow::Result<()> {
     println!(
-        "Checking arb for market: {} and {}",
+        "Checking funding arb for market: {} and {}",
         extended_market_name, pacifica_market_name
     );
     let extended_result_vec = get_extended_market_data(extended_market_name).await?;
