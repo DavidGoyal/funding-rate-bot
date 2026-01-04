@@ -58,7 +58,6 @@ pub struct OpenPositionData {
     pub margin: String,
     pub funding: String,
     pub isolated: bool,
-    pub liquidation_price: String,
     pub created_at: u64,
     pub updated_at: u64,
 }
@@ -74,6 +73,7 @@ pub struct SignatureHeader {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PlaceOrder {
     pub account: String,
+    pub agent_wallet: String,
     pub signature: String,
     pub timestamp: u64,
     pub expiry_window: u64,

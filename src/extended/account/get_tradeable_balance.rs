@@ -2,9 +2,8 @@ use anyhow::anyhow;
 
 use crate::extended::structs::{TradeableBalance, TradeableBalanceData};
 
-pub async fn get_extended_tradeable_balance() -> anyhow::Result<TradeableBalanceData> {
+pub async fn get_extended_tradeable_balance(api_key: &str) -> anyhow::Result<TradeableBalanceData> {
     let url = String::from("https://api.starknet.extended.exchange/api/v1/user/balance");
-    let api_key = std::env::var("EXTENDED_API_KEY").unwrap();
 
     let client = reqwest::Client::new();
     let tradeable_balance_data = client

@@ -17,12 +17,11 @@ pub async fn place_pacifica_order(
     qty: f64,
     market_info: &MarketInfoData,
     tp_sl_included: bool,
+    private_key: &str,
+    wallet_address: &str,
 ) -> anyhow::Result<()> {
-    let private_key = std::env::var("PACIFICA_PRIVATE_KEY").unwrap();
-
     let keypair = Keypair::from_base58_string(&private_key);
-    let public_key = keypair.pubkey();
-
+    let agent_wallet_address = keypair.pubkey().to_string();
     let current_timestamp = Utc::now().timestamp_millis();
 
     let market_price = market_info.mid.parse::<f64>()?;
@@ -85,8 +84,9 @@ pub async fn place_pacifica_order(
         let signature = sign_message(&signature_header, &signature_payload, &keypair).await?;
 
         let place_order = PlaceOrder {
-            account: public_key.to_string(),
+            account: wallet_address.to_string(),
             signature: signature,
+            agent_wallet: agent_wallet_address,
             timestamp: signature_header.timestamp,
             expiry_window: signature_header.expiry_window,
             symbol: signature_payload.symbol,
@@ -106,6 +106,8 @@ pub async fn place_pacifica_order(
             .send()
             .await?;
 
+        println!("Response: {:?}", response);
+
         if response.status().is_success() {
             return Ok(());
         } else {
@@ -121,7 +123,7 @@ pub async fn place_pacifica_order(
         let signature_payload = SignaturePayload {
             symbol: market_name.to_string(),
             side: side,
-            reduce_only: false,
+            reduce_only: true,
             amount: qty.to_string(),
             slippage_percent: SLIPPAGE.to_string(),
             client_order_id: uuid::Uuid::new_v4().to_string(),
@@ -132,13 +134,14 @@ pub async fn place_pacifica_order(
         let signature = sign_message(&signature_header, &signature_payload, &keypair).await?;
 
         let place_order = PlaceOrder {
-            account: public_key.to_string(),
+            account: wallet_address.to_string(),
             signature: signature,
+            agent_wallet: agent_wallet_address,
             timestamp: signature_header.timestamp,
             expiry_window: signature_header.expiry_window,
             symbol: signature_payload.symbol,
             side: signature_payload.side,
-            reduce_only: false,
+            reduce_only: true,
             amount: signature_payload.amount,
             slippage_percent: SLIPPAGE.to_string(),
             client_order_id: signature_payload.client_order_id,

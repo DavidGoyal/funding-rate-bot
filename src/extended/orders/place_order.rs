@@ -21,10 +21,11 @@ pub async fn place_extended_order(
     side: Side,
     qty: f64,
     tp_sl_included: bool,
+    api_key: &str,
+    stark_private_key: &str,
+    vault_id: &str,
+    stark_public_key: &str,
 ) -> anyhow::Result<()> {
-    let api_key = std::env::var("EXTENDED_API_KEY").unwrap();
-    let stark_private_key = std::env::var("EXTENDED_STARK_PRIVATE_KEY").unwrap();
-    let vault_id = std::env::var("EXTENDED_VAULT_ID").unwrap();
     let client = reqwest::Client::new();
 
     let fees_vec = get_fees(&client, market_name, &api_key).await?;
@@ -74,6 +75,7 @@ pub async fn place_extended_order(
         &ctx,
         order_price,
         tp_sl_included,
+        stark_public_key,
     )
     .await?;
 
@@ -81,7 +83,7 @@ pub async fn place_extended_order(
         .post("https://api.starknet.extended.exchange/api/v1/user/order")
         .json(&place_order)
         .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        .header("X-Api-Key", &api_key)
+        .header("X-Api-Key", api_key)
         .send()
         .await?
         .text()
@@ -166,6 +168,7 @@ pub async fn create_order(
     ctx: &OrderContext,
     normal_price: f64,
     tp_sl_included: bool,
+    stark_public_key: &str,
 ) -> Result<PlaceOrder, anyhow::Error> {
     let nonce = rand::random_range(0..u32::MAX);
     let expiry_epoch_millis = chrono::Utc::now().timestamp_millis() as u64 + 1000 * 60 * 60;
@@ -236,6 +239,7 @@ pub async fn create_order(
             &ctx.fee_rate.parse::<f64>().unwrap(),
             ctx,
             !is_buying,
+            stark_public_key,
         )
         .await?;
 
@@ -247,6 +251,7 @@ pub async fn create_order(
             &ctx.fee_rate.parse::<f64>().unwrap(),
             ctx,
             !is_buying,
+            stark_public_key,
         )
         .await?;
 
@@ -258,6 +263,7 @@ pub async fn create_order(
             &ctx.fee_rate.parse::<f64>().unwrap(),
             ctx,
             is_buying,
+            stark_public_key,
         )
         .await?;
 
@@ -303,6 +309,7 @@ pub async fn create_order(
             &ctx.fee_rate.parse::<f64>().unwrap(),
             ctx,
             is_buying,
+            stark_public_key,
         )
         .await?;
 
@@ -336,6 +343,7 @@ pub async fn get_create_order_params(
     total_fee_rate: &f64,
     ctx: &OrderContext,
     is_buying: bool,
+    stark_public_key: &str,
 ) -> Result<CreateOrderParams, anyhow::Error> {
     let collateral_amount = amount_of_synthetic.mul(price);
     let fee = total_fee_rate.mul(collateral_amount);
@@ -362,8 +370,6 @@ pub async fn get_create_order_params(
             .mul(ctx.settlement_resolution_synthetic.parse::<f64>().unwrap())
             .floor()
     };
-
-    let stark_public_key = std::env::var("EXTENDED_STARK_PUBLIC_KEY").unwrap();
 
     let order_hash = get_starknet_order_msg_hash(
         nonce,
